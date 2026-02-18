@@ -1,0 +1,205 @@
+<div class="relative w-screen h-screen">
+
+  <!-- Main Layout (Map + Info Panel) -->
+  <div class="flex flex-col md:flex-row w-full h-full bg-gray-900">
+    <div #map class="h-3/5 md:h-full md:w-[60%] flex-shrink-0 bg-gray-700"></div>
+    
+    <!-- Info Panel -->
+    <div 
+      class="h-2/5 md:h-full md:w-[40%] bg-gray-900 md:bg-gray-800 flex flex-col text-white shadow-[0_-10px_30px_rgba(0,0,0,0.3)] md:shadow-none md:border-l-2 md:border-gray-700"
+      [class.translate-y-full]="isChatOpen()">
+      
+      <!-- Panel Header -->
+      <div class="p-4 md:p-6 shrink-0">
+        <!-- AI Route Search -->
+        <div class="mb-4">
+            <form (submit)="searchForRoute(); $event.preventDefault()">
+                <label for="route-search" class="block text-sm font-medium text-gray-400 mb-1">AI ROUTE FINDER</label>
+                <div class="flex items-center gap-2">
+                    <input 
+                        id="route-search"
+                        type="text" 
+                        placeholder="e.g., Ruta Oscar Gámez"
+                        class="w-full bg-gray-700 text-white rounded-md border-gray-600 px-3 py-2 focus:ring-red-500 focus:border-red-500 disabled:opacity-50"
+                        [value]="routeSearchQuery()"
+                        (input)="routeSearchQuery.set($any($event.target).value)"
+                        [disabled]="isSearchingRoute()"
+                    />
+                    <button type="submit" [disabled]="!routeSearchQuery().trim() || isSearchingRoute()" class="bg-red-600 text-white p-2.5 rounded-md hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors shrink-0">
+                      @if(isSearchingRoute()) {
+                        <div class="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
+                      } @else {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                           <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                        </svg>
+                      }
+                    </button>
+                </div>
+            </form>
+            @if (searchError()) {
+              <p class="text-red-400 text-sm mt-2">{{ searchError() }}</p>
+            }
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 items-center">
+          <div>
+            <p class="text-sm text-gray-400">CURRENT ROUTE</p>
+            <h2 class="text-xl lg:text-2xl font-bold truncate" [title]="currentRoute()?.name ?? 'N/A'">{{ currentRoute()?.name ?? 'N/A' }}</h2>
+          </div>
+          <div class="text-right">
+            <p class="text-sm text-gray-400">NEXT STOP</p>
+            <h2 class="text-xl lg:text-2xl font-bold">{{ nextStop()?.name ?? '...' }}</h2>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Announcement -->
+      <div class="px-4 py-3 text-center min-h-[4rem] flex items-center justify-center shrink-0 border-y border-gray-700">
+        @if (isLoadingAnnouncement()) {
+          <div class="flex items-center justify-center space-x-2">
+            <div class="w-2 h-2 rounded-full bg-gray-400 animate-pulse [animation-delay:-0.3s]"></div>
+            <div class="w-2 h-2 rounded-full bg-gray-400 animate-pulse [animation-delay:-0.15s]"></div>
+            <div class="w-2 h-2 rounded-full bg-gray-400 animate-pulse"></div>
+            <span class="text-gray-400 text-sm italic ml-2">Generating announcement...</span>
+          </div>
+        } @else if (announcement()) {
+          <p class="text-base lg:text-lg italic text-teal-300">"{{ announcement() }}"</p>
+        } @else if (currentRoute()) {
+           <p class="text-sm text-gray-500">Approaching next stop...</p>
+        }
+      </div>
+
+      <!-- Upcoming Stops List -->
+      <div class="px-4 md:px-6 py-3 flex-grow overflow-y-auto custom-scrollbar">
+        <h3 class="text-xs uppercase text-gray-500 font-semibold mb-3">Stops</h3>
+        <div class="space-y-1 font-sans">
+          @for(stop of displayedStops(); track stop.name) {
+            <div class="flex items-center space-x-4 p-2 rounded-md transition-colors hover:bg-gray-700/50 w-full"
+                 [class.bg-red-500/10]="nextStop()?.name === stop.name">
+              <!-- Status Icon -->
+              <div class="flex flex-col items-center">
+                <div class="w-4 h-4 rounded-full border-2"
+                     [class.bg-gray-600]="passedStops().has(stop.name)"
+                     [class.border-gray-600]="passedStops().has(stop.name)"
+                     [class.bg-red-500]="nextStop()?.name === stop.name"
+                     [class.border-red-400]="nextStop()?.name === stop.name"
+                     [class.bg-gray-700]="!passedStops().has(stop.name) && nextStop()?.name !== stop.name"
+                     [class.border-gray-500]="!passedStops().has(stop.name) && nextStop()?.name !== stop.name">
+                </div>
+              </div>
+              <!-- Stop Name -->
+              <span class="text-sm"
+                    [class.text-gray-500]="passedStops().has(stop.name)"
+                    [class.font-bold]="nextStop()?.name === stop.name"
+                    [class.text-red-400]="nextStop()?.name === stop.name">
+                {{ stop.name }}
+              </span>
+            </div>
+          } @empty {
+             @if (!currentRoute() && !isSearchingRoute()) {
+                <p class="text-sm text-gray-500 p-2">Search for a route to see its stops.</p>
+             } @else if (isSearchingRoute()) {
+                <p class="text-sm text-gray-500 p-2">Loading stops...</p>
+             } @else {
+                <p class="text-sm text-gray-500 p-2">No stops to display.</p>
+             }
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAYS -->
+  @if (!currentRoute() && !searchError()) {
+    <div class="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="text-center text-white p-4">
+        <p class="text-lg">{{ statusMessage() }}</p>
+        @if (isSearchingRoute()) {
+          <div class="mt-4 w-16 h-16 border-4 border-t-transparent border-white rounded-full animate-spin mx-auto"></div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Floating Action Button for Chat -->
+  <button 
+    (click)="toggleChat()" 
+    class="absolute bottom-4 right-4 z-20 w-16 h-16 bg-red-600 rounded-full shadow-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-red-500 flex items-center justify-center transition-transform duration-300 ease-in-out"
+    [class.scale-0]="isChatOpen()">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    </svg>
+  </button>
+
+  <!-- AI Chat Panel -->
+  @if(isChatOpen()) {
+    <div 
+      class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm z-30 transition-opacity" 
+      [class.opacity-100]="isChatOpen()"
+      [class.opacity-0]="!isChatOpen()"
+      (click)="toggleChat()"
+    ></div>
+
+    <div 
+      class="absolute bottom-0 left-0 right-0 h-[85vh] md:h-[90vh] bg-gray-800 text-white shadow-[0_-10px_30px_rgba(0,0,0,0.3)] rounded-t-2xl z-40 flex flex-col transition-transform duration-500 ease-in-out"
+      [style.transform]="isChatOpen() ? 'translateY(0)' : 'translateY(100%)'">
+      
+      <!-- Chat Header -->
+      <div class="flex items-center justify-between p-4 border-b border-gray-700 shrink-0">
+        <h2 class="text-xl font-bold text-red-500">AI Assistant</h2>
+        <button (click)="toggleChat()" class="p-2 rounded-full hover:bg-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Chat History -->
+      <div #chatHistoryContainer class="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-4">
+        @for (message of chatMessages(); track $index) {
+          <div class="flex" [class.justify-end]="message.role === 'user'">
+            <div 
+              class="max-w-xs md:max-w-md lg:max-w-2xl px-4 py-2 rounded-2xl"
+              [class.bg-red-600]="message.role === 'user'"
+              [class.rounded-br-none]="message.role === 'user'"
+              [class.bg-gray-700]="message.role === 'model'"
+              [class.rounded-bl-none]="message.role === 'model'">
+              <p class="whitespace-pre-wrap">{{ message.content }}</p>
+            </div>
+          </div>
+        }
+        @if (isChatLoading()) {
+          <div class="flex justify-start">
+             <div class="max-w-xs md:max-w-md lg:max-w-2xl px-4 py-2 rounded-2xl bg-gray-700 rounded-bl-none">
+                <div class="flex items-center justify-center space-x-2">
+                    <div class="w-2 h-2 rounded-full bg-gray-400 animate-pulse [animation-delay:-0.3s]"></div>
+                    <div class="w-2 h-2 rounded-full bg-gray-400 animate-pulse [animation-delay:-0.15s]"></div>
+                    <div class="w-2 h-2 rounded-full bg-gray-400 animate-pulse"></div>
+                </div>
+             </div>
+          </div>
+        }
+      </div>
+
+      <!-- Chat Input -->
+      <div class="p-4 border-t border-gray-700 shrink-0 bg-gray-800">
+        <form (submit)="sendMessage(); $event.preventDefault()">
+          <div class="flex items-center space-x-2">
+            <input 
+              type="text"
+              placeholder="Ask about your route..."
+              class="w-full bg-gray-700 text-white rounded-full border-gray-600 px-4 py-3 focus:ring-red-500 focus:border-red-500"
+              [value]="chatInput()"
+              (input)="chatInput.set($any($event.target).value)"
+            />
+            <button type="submit" [disabled]="!chatInput().trim() || isChatLoading()" class="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M12 4v14" />
+              </svg>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,7 @@
+{
+  "name": "Estelí Bus Tracker",
+  "description": "A real-time bus tracking application for Estelí, Nicaragua, with a dynamic map display and AI-powered stop announcements.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
